@@ -1,20 +1,37 @@
 "use client";
 import { imageData } from "@/utils/image";
 import { Template } from "@/utils/template";
-import axios from "axios";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [generatedText, setGeneratedText] = useState("");
+  function extractText(str: string) {
+    return str?.trim()?.slice(9, str?.trim()?.length - 1);
+  }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  function decodeUnicodeString(input: any) {
+    // Use a regular expression to find all the Unicode escape sequences in the input string
+    let decodedString = input.replace(/\\u[\dA-F]{4}/gi, function (match: any) {
+      // Convert each escape sequence to the corresponding character
+      return String.fromCharCode(parseInt(match.replace(/\\u/g, ""), 16));
+    });
+
+    // Additional step to replace escaped quotes and other characters
+    decodedString = decodedString.replace(/\\"/g, '"').replace(/\\n/g, "\n");
+
+    return decodedString;
+  }
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Form submitted:", inputValue);
-    axios
-      .post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
-        {
+    const aiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           contents: [
             {
               parts: [
@@ -30,23 +47,34 @@ export default function Home() {
               ],
             },
           ],
-          generationConfig: {
-            response_mime_type: "application/json",
-          },
+          // generationConfig: {
+          //   response_mime_type: "application/json",
+          // },
+        }),
+      }
+    );
+
+    const reader = aiResponse.body?.getReader();
+    const decoder = new TextDecoder("utf-8");
+    if (!reader) return;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const dataString = chunk.trim().split("\n");
+      dataString.forEach((data) => {
+        if (data?.includes(`"text":`)) {
+          const html = extractText(data);
+          setGeneratedText((prev) => prev + decodeUnicodeString(html));
         }
-      )
-      .then((response) => {
-        console.log(
-          JSON.parse(response.data.candidates[0].content.parts[0].text)
-        );
-        setGeneratedText(
-          JSON.parse(response.data.candidates[0].content.parts[0].text).html
-        );
-      })
-      .catch((error) => {
-        console.error(error);
       });
+    }
   };
+
+  const iframeSrc = useMemo(() => {
+    return `${Template(generatedText)}`;
+  }, [generatedText]);
 
   return (
     <div className="h-screen flex flex-col">
@@ -54,17 +82,11 @@ export default function Home() {
         <h1 className="text-3xl font-bold">AI UI Streaming</h1>
       </div>
       <div className="min-h-[700px] bg-slate-100/50 border border-black my-5 mx-5">
-        <iframe
-          className="w-full h-full"
-          srcDoc={`
-          ${Template(generatedText)}
-          `}
-        ></iframe>
+        <iframe className="w-full h-full" srcDoc={iframeSrc}></iframe>
       </div>
       <form onSubmit={handleSubmit} className="max-w-md mx-auto p-4">
         <div className="flex flex-col justify-center items-center gap-5">
           <input
-            required
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}

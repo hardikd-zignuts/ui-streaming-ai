@@ -11,6 +11,7 @@ export const Template = (code: string) =>
       rel="stylesheet"
     />
   </head>
+  <body>
   ${code}
   </body>
 </html>
