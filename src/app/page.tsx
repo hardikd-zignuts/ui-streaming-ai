@@ -1,14 +1,22 @@
 "use client";
-import { imageData } from "@/utils/image";
 import { Template } from "@/utils/template";
 import React, { useMemo, useState } from "react";
 
 export default function Home() {
   const [inputValue, setInputValue] = useState("");
+  const [image, setImage] = useState(null);
   const [generatedText, setGeneratedText] = useState("");
   function extractText(str: string) {
     return str?.trim()?.slice(9, str?.trim()?.length - 1);
   }
+  const toBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
 
   function decodeUnicodeString(input: any) {
     // Use a regular expression to find all the Unicode escape sequences in the input string
@@ -24,6 +32,14 @@ export default function Home() {
   }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!image) {
+      alert("Please upload an image.");
+      return;
+    }
+
+    // Convert image to Base64
+    const imageData = await toBase64(image);
+    console.log(imageData);
     const aiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
       {
@@ -36,12 +52,14 @@ export default function Home() {
             {
               parts: [
                 {
-                  text: 'Youre a frontend web developer that specializes in tailwindcss. Given a description or an image, generate HTML with tailwindcss. You should support both dark and light mode. It should render nicely on desktop, tablet, and mobile. Keep your responses concise and just return HTML that would appear in the <body> no need for <head> or <body>. Use placehold.co for placeholder images. If the user asks for interactivity, use modern ES6 javascript and native browser apis to handle events. Do not generate SVGs, instead use an image tag with an alt attribute of the same descriptive name, i.e.: <img aria-hidden="true" alt="check" src="/icons/check.svg" />',
+                  text:
+                    'Youre a frontend web developer that specializes in tailwindcss. Given a description or an image, generate HTML with tailwindcss. You should support both dark and light mode. It should render nicely on desktop, tablet, and mobile. Keep your responses concise and just return HTML that would appear in the <body> no need for <head> or <body>. Use placehold.co for placeholder images. If the user asks for interactivity, use modern ES6 javascript and native browser apis to handle events. Do not generate SVGs, instead use an image tag with an alt attribute of the same descriptive name, i.e.: <img aria-hidden="true" alt="check" src="/icons/check.svg" />' +
+                    inputValue,
                 },
                 {
                   inlineData: {
                     mimeType: "image/png",
-                    data: imageData,
+                    data: imageData.slice(22),
                   },
                 },
               ],
@@ -82,10 +100,16 @@ export default function Home() {
         <h1 className="text-3xl font-bold">AI UI Streaming</h1>
       </div>
       <div className="min-h-[700px] bg-slate-100/50 border border-black my-5 mx-5">
-        <iframe className="w-full h-full" srcDoc={iframeSrc}></iframe>
+        <iframe className="w-full h-full p-5" srcDoc={iframeSrc}></iframe>
       </div>
       <form onSubmit={handleSubmit} className="max-w-md mx-auto p-4">
         <div className="flex flex-col justify-center items-center gap-5">
+          <input
+            onChange={(e: any) => setImage(e.target.files[0] as any)}
+            id="img"
+            type="file"
+            name="img"
+          />
           <input
             type="text"
             value={inputValue}
