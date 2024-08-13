@@ -1,5 +1,6 @@
 "use client";
-import { imageData } from "@/utils/image";
+import { generateUI } from "@/actions";
+import { geminiFlash } from "@/utils/gemini";
 import { Template } from "@/utils/template";
 import React, { useMemo, useState } from "react";
 
@@ -9,6 +10,22 @@ export default function Home() {
   function extractText(str: string) {
     return str?.trim()?.slice(9, str?.trim()?.length - 1);
   }
+  function extractCode(str: string) {
+    if (str.includes("```html")) {
+      return str?.trim()?.slice(7);
+    } else if (str.includes("```")) {
+      return str?.trim()?.slice(-3);
+    }
+    return str;
+  }
+  const toBase64 = (file: File) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
 
   function decodeUnicodeString(input: any) {
     // Use a regular expression to find all the Unicode escape sequences in the input string
@@ -24,52 +41,78 @@ export default function Home() {
   }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const aiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: 'Youre a frontend web developer that specializes in tailwindcss. Given a description or an image, generate HTML with tailwindcss. You should support both dark and light mode. It should render nicely on desktop, tablet, and mobile. Keep your responses concise and just return HTML that would appear in the <body> no need for <head> or <body>. Use placehold.co for placeholder images. If the user asks for interactivity, use modern ES6 javascript and native browser apis to handle events. Do not generate SVGs, instead use an image tag with an alt attribute of the same descriptive name, i.e.: <img aria-hidden="true" alt="check" src="/icons/check.svg" />',
-                },
-                {
-                  inlineData: {
-                    mimeType: "image/png",
-                    data: imageData,
-                  },
-                },
-              ],
-            },
-          ],
-          // generationConfig: {
-          //   response_mime_type: "application/json",
-          // },
-        }),
-      }
-    );
-
-    const reader = aiResponse.body?.getReader();
-    const decoder = new TextDecoder("utf-8");
-    if (!reader) return;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const dataString = chunk.trim().split("\n");
-      dataString.forEach((data) => {
-        if (data?.includes(`"text":`)) {
-          const html = extractText(data);
-          setGeneratedText((prev) => prev + decodeUnicodeString(html));
-        }
-      });
+    if (!image) {
+      alert("Please upload an image.");
+      return;
     }
+
+    // Convert image to Base64
+    const imageData = (await toBase64(image)) as string;
+
+    const prompt = `Youre a frontend web developer that specializes in tailwindcss. Given a description or an image, generate HTML with tailwindcss. You should support both dark and light mode. It should render nicely on desktop, tablet, and mobile. Keep your responses concise and just return HTML that would appear in the <body> no need for <head> or <body>. Use placehold.co for placeholder images. If the user asks for interactivity, use modern ES6 javascript and native browser apis to handle events. Do not generate SVGs, instead use an image tag with an alt attribute of the same descriptive name, i.e.: <img aria-hidden="true" alt="check" src="/icons/check.svg" />`;
+
+    const imageParts: any = [(imageData as any).slice(22)];
+
+    // const result = await geminiFlash.generateContentStream([
+    //   prompt,
+    //   ...imageParts,
+    // ]);
+
+    // for await (const chunk of result.stream) {
+    //   const chunkText = chunk.text();
+    //   console.log(chunkText);
+    //   setGeneratedText(
+    //     (prev) => prev + extractCode(decodeUnicodeString(chunkText))
+    //   );
+    // }
+    const data = await generateUI(prompt, imageParts);
+    console.log({ data });
+    // const aiResponse = await fetch(
+    //   `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+    //   {
+    //     method: "POST",
+    //     headers: {
+    //       "Content-Type": "application/json",
+    //     },
+    //     body: JSON.stringify({
+    //       contents: [
+    //         {
+    //           parts: [
+    //             {
+    //               text: prompt + inputValue,
+    //             },
+    //             {
+    //               inlineData: {
+    //                 mimeType: "image/png",
+    //                 data: imageParts[0],
+    //               },
+    //             },
+    //           ],
+    //         },
+    //       ],
+    //       // generationConfig: {
+    //       //   response_mime_type: "application/json",
+    //       // },
+    //     }),
+    //   }
+    // );
+
+    // const reader = aiResponse.body?.getReader();
+    // const decoder = new TextDecoder("utf-8");
+    // if (!reader) return;
+    // while (true) {
+    //   const { value, done } = await reader.read();
+    //   if (done) break;
+
+    //   const chunk = decoder.decode(value, { stream: true });
+    //   const dataString = chunk.trim().split("\n");
+    //   dataString.forEach((data) => {
+    //     if (data?.includes(`"text":`)) {
+    //       const html = extractText(data);
+    //       setGeneratedText((prev) => prev + decodeUnicodeString(html));
+    //     }
+    //   });
+    // }
   };
 
   const iframeSrc = useMemo(() => {
